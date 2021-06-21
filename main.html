@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dropbox Replica</title>
+</head>
+<body>
+<table width="100%">
+    <tr>
+        <td>
+            Directory: {{ directory.path }}{{ directory.name }}/<br/>
+        </td>
+        <td align="right">
+            Account: {{ account.key.id() }} [ <a href="{{ logout_url}}">Logout</a> ]<br/>
+            Space Used: {{ readable_bytes(account.size) }}
+        </td>
+    </tr>
+</table>
+<hr>
+<hr>
+
+<style>
+    .inputs {
+        float: left;
+        width: 100%;
+        -ms-box-sizing: border-box; /* ie8 */
+        -khtml-box-sizing: border-box; /* konqueror */
+        -webkit-box-sizing: border-box; /* Safari/Chrome, other WebKit */
+        -moz-box-sizing: border-box; /* Firefox, other Gecko */
+        box-sizing: border-box; /* Opera/IE 8+ */
+        box-sizing: border-box; /* css3 rec */
+    }
+
+    th {
+        height: 25px;
+        min-width: 50px;
+        text-align: left;
+        background-color: darkgrey;
+        color: white;
+    }
+</style>
+<!--{% set duplicates={} %}-->
+
+<table width="100%">
+    <tr>
+        <td width="70%" valign="top">
+            {% set folders = [] %}
+            {% for k in directory.folders %}
+            {% do folders.append( k.get() ) %}
+            {% endfor %}
+
+            {% set files = [] %}
+            {% for k in directory.files %}
+            {% do files.append( k.get() ) %}
+            {% endfor %}
+            <table width="100%" cellpadding="5px">
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Move / Remove</th>
+                    <th>Duplicates</th>
+                    <th>Size</th>
+                    <th>Created On</th>
+                </tr>
+                {% if directory.path %}
+                <tr>
+                    <td>
+                        <a href="/?directory_key={{ directory.directory.urlsafe() }}">../</a>
+                    </td>
+                    <td>
+                        &lt;parant&gt;
+                    </td>
+                    <td>
+
+                    </td>
+                </tr>
+
+                {% endif %}
+                {% for folder in folders|sort(attribute='name') %}
+                <tr>
+                    <td>
+                        <a href="/?directory_key={{ folder.key.urlsafe() }}">{{ folder.name }}/</a>
+                    </td>
+                    <td>
+                        directory
+                    </td>
+                    <td>
+                        {% if not folder.files and not folder.folders %}
+                        <a href="/remove_dir?folder_key={{ folder.key.urlsafe() }}&directory_key={{ directory.key.urlsafe() }}">delete</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% for file in files|sort(attribute='name') %}
+                <tr>
+                    <td>
+                        <a href="/download_file?file_key={{ file.key.urlsafe() }}" title="download">{{ file.name }}</a>
+                    </td>
+                    <td>
+                        {{ file.content }}
+                    </td>
+                    <td>
+                        <a href="/move_file?file_key={{ file.key.urlsafe() }}&directory_key={{ directory.key.urlsafe() }}">move</a>
+                        /
+                        <a href="/remove_file?file_key={{ file.key.urlsafe() }}&directory_key={{ directory.key.urlsafe() }}">remove</a>
+
+                    </td>
+                    <td>
+                        {% set _=duplicates.__setitem__(file.name, get_duplicates(file.name, file.size, file.path)) %}
+                        {% if duplicates[file.name] %}
+                        <a href="#" onclick="show_duplicates('{{ file.name }}')">show/hide</a>
+                        <div id="{{ file.name }}" class="duplicates" style="display: none">
+                            <hr/>
+                            {% for copy in duplicates[file.name]|sort(attribute='path') %}
+                            {{loop.index}}. <a href="/?directory_key={{ copy.directory.urlsafe() }}" title="show in folder">
+                                {{ copy.path+copy.name }}
+                            </a>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ readable_bytes(file.size) }}
+                    </td>
+                    <td>
+                        {{ file.created.strftime('%h %d, %Y %H:%M Hrs.') }}
+                    </td>
+                </tr>
+                {% endfor %}
+
+            </table>
+        </td>
+
+        <td width="30%" align="right" valign="top">
+            <div style="border:1px solid black;padding: 10px" align="left">
+                <table>
+                    <tr>
+                        <td>
+                            Folders
+                        </td>
+                        <td>
+                            :
+                        </td>
+                        <td>
+                            {{ directory.folders|length }}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            Files
+                        </td>
+                        <td>
+                            :
+                        </td>
+                        <td>
+                            {{ directory.files|length }}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td>
+                            Space Used
+                        </td>
+                        <td>
+                            :
+                        </td>
+                        <td>
+                            {{ readable_bytes(directory.size) }}
+                        </td>
+                    </tr>
+                </table>
+            </div>
+            <hr/>
+            <div style="border:1px solid black;padding: 10px">
+                <form action="/add_dir" method="post">
+                    <input type="hidden" name="directory_key" value="{{ directory.key.urlsafe() }}">
+                    <table width="100%">
+                        <tr>
+                            <td>
+                                New Directory
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <input type="text" name="name" placeholder="Name" required class="inputs">
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <input type="submit" value="Add">
+                                {% if account.session['direxst'] %}
+                                <label style="color: red">{{ account.session['direxst'] }}</label>
+                                {% set _=account.session.__setitem__('direxst', None) %}
+                                {% set _=account.put() %}
+                                {% endif %}
+
+                            </td>
+                        </tr>
+                    </table>
+                </form>
+            </div>
+            <hr/>
+            <div style="border:1px solid black;padding: 10px">
+                <form action="{{ upload_file }}" method="post" enctype="multipart/form-data">
+                    <input type="hidden" name="directory_key" value="{{ directory.key.urlsafe() }}">
+                    <table width="100%">
+                        <tr>
+                            <td>
+                                Upload File
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <input type="file" name="file" required class="inputs">
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <input type="submit" value="Upload">
+                                {% if account.session['filexst'] %}
+                                <label style="color: red">{{ account.session['filexst'] }}</label>
+                                {% set _=account.session.__setitem__('filexst', None) %}
+                                {% set _=account.put() %}
+                                {% endif %}
+
+                            </td>
+                        </tr>
+                    </table>
+                </form>
+            </div>
+            <hr/>
+            {% if account.session['move_file'] %}
+            {% set move=Key(urlsafe=account.session['move_file']).get() %}
+
+            <div style="border:1px solid black;padding: 10px">
+                <table width="100%">
+                    <tr>
+                        <td colspan="2">
+
+                            <form action="/move_file" method="post">
+                                <input type="hidden" name="directory_key" value="{{ directory.key.urlsafe() }}">
+                                <input type="hidden" name="action" value="cancel">
+                                Move File <input type="submit" value="Cancel"/>
+                            </form>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2">
+                            {{ move.path }}{{ move.name }}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td width="50%">
+                            {% if move.directory != directory.key %}
+                            <form action="/move_file" method="post">
+                                <input type="hidden" name="directory_key" value="{{ directory.key.urlsafe() }}">
+                                <input type="hidden" name="action" value="move">
+                                <input type="submit" value="Move Here"/>
+                            </form>
+                            {% if account.session['movexst'] %}
+                                <label style="color: red">{{ account.session['movexst'] }}</label>
+                                {% set _=account.session.__setitem__('movexst', None) %}
+                                {% set _=account.put() %}
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                    </tr>
+
+                </table>
+            </div>
+            {% endif %}
+
+        </td>
+    </tr>
+</table>
+
+
+<hr/>
+<hr/>
+
+
+<script type="text/javascript">
+    function show_duplicates(id) {
+        document.querySelectorAll('.duplicates').forEach(x => {
+            if (x.id === id && x.style.display === "none")
+                x.style.display = "block";
+            else
+                x.style.display = "none";
+        });
+    }
+</script>
+
+
+<!--{{ directory.folders }}-->
+
+</body>
+</html>
